@@ -14,7 +14,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            window::set_cursor_ignore,
             window::start_drag,
             window::set_autostart,
             window::open_settings,

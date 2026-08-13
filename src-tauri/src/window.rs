@@ -1,35 +1,15 @@
 use tauri::{App, Manager, WebviewWindow};
 
-/// 配置主窗口：铺满屏幕工作区、置顶、点击穿透（不拦截鼠标）
+/// 配置主窗口：置顶、无边框、透明。窗口尺寸=宠物大小，正常接收鼠标事件
+/// （透明区域外无内容，等效不挡桌面操作）。
 pub fn configure_main_window(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(window) = app.get_webview_window("main") {
-        setup_window(&window)?;
+        window.set_always_on_top(true).ok();
     }
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
-pub fn setup_window(window: &WebviewWindow) -> Result<(), Box<dyn std::error::Error>> {
-    // macOS：置顶 + 点击穿透（宠物不挡操作）
-    window.set_always_on_top(true).ok();
-    window.set_ignore_cursor_events(true).ok();
-    Ok(())
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn setup_window(window: &WebviewWindow) -> Result<(), Box<dyn std::error::Error>> {
-    window.set_always_on_top(true).ok();
-    window.set_ignore_cursor_events(true).ok();
-    Ok(())
-}
-
-/// 开关点击穿透：true=穿透（不挡操作），false=可接收鼠标事件（用于拖拽）
-#[tauri::command]
-pub fn set_cursor_ignore(window: WebviewWindow, ignore: bool) {
-    window.set_ignore_cursor_events(ignore).ok();
-}
-
-/// 开始拖拽窗口（需先关闭穿透，见 set_cursor_ignore(false)）
+/// 开始拖拽窗口（mousedown 命中宠物时由前端直接调用）
 #[tauri::command]
 pub fn start_drag(window: WebviewWindow) {
     window.start_dragging().ok();

@@ -130,7 +130,7 @@ mochi/
 | P0 | 安装 Rust 工具链；`npm create tauri-app` 初始化；配置透明置顶窗口 | 空白透明窗口能跑 | ✅ 已完成 |
 | P1 | 占位宠物 + Renderer + 主循环；实现 WALK/IDLE 动画 | 宠物能走动待机 | ✅ 已完成（程序化绘制） |
 | P2 | 状态机补全 SLEEP / LOOK；随机切换逻辑 | 完整陪伴行为 | ✅ 已完成 |
-| P3 | 点击穿透 + 拖拽 + 点击反馈交互 | 可互动 | ✅ 已完成 |
+| P3 | 拖拽 + 点击反馈交互（窗口跟随宠物，直接拖拽） | 可互动 | ✅ 已完成 |
 | P4 | 托盘菜单 + 设置面板 + 本地存储 | 可控可配置 | ✅ 已完成 |
 | P5 | Windows/macOS 打包脚本 + README；双平台自测 | 可分发安装包 | ✅ 已完成（macOS 实测出包；Windows 走 CI） |
 
@@ -145,8 +145,10 @@ mochi/
 - macOS 上 Tauri 透明窗口在部分桌面环境下边缘可能有 1px 描边，需实测。
 - 开机自启在 macOS 需处理权限弹窗；Windows 通过注册表/启动文件夹实现。
 - 素材为占位 CC0 资源，后续替换 Live2D 需引入 `live2d` 相关渲染（不在本期）。
-- 点击穿透（ignoreCursorEvents）在 macOS 上拖拽时临时关闭，松手需恢复，
-  否则鼠标事件被窗口吃掉导致后续交互失灵 —— 已在 `main.js` 的 `mouseup` 中恢复。
+- 交互模型：窗口尺寸=宠物（透明无边框），正常接收鼠标；每帧 `setPosition` 跟随宠物
+  移动，透明区外无内容故不挡桌面操作，无需 ignoreCursorEvents 穿透。
+- `startDragging()` 需在窗口句柄已缓存的同步上下文调用，避免 await 破坏拖拽时序
+  （窗口句柄在启动时预热缓存）。
 
 ---
 
@@ -157,14 +159,16 @@ mochi/
 恢复时跳变），回调 `onFrame(dt, now)`。暴露 `start()/stop()`。
 
 ### 7.2 渲染器 `render/Renderer.js`
-- 构造时按 `devicePixelRatio` 设置 canvas 像素尺寸（`w*dpr`），并用
-  `ctx.setTransform(dpr,0,0,dpr,0,0)` 做 DPI 适配，逻辑坐标仍按 CSS 像素。
-- 监听 `resize` 同步尺寸；`clear()` 用 `clearRect` 清空（透明背景保留）。
+- 窗口尺寸固定为宠物大小（`size=64`，构造时传入），canvas 像素按 `devicePixelRatio`
+  设置（`w*dpr`），`ctx.setTransform(dpr,0,0,dpr,0,0)` 做 DPI 适配。
+- `clear()` 用 `clearRect` 清空（透明背景保留），宠物绘制于窗口内 `(0,0)`。
 
 ### 7.3 宠物状态机 `core/Pet.js`
-- 字段：`x/y` 坐标、`dir`（朝向 1 右 / -1 左）、`size=64`、`state`、`stateTime`（状态已持续 ms）、
-  `nextThink`（下次决策随机间隔）、`blink`（眨眼计时）、`lookTargetX`（LOOK 注视目标）。
-- 出生贴底：`y = screen.height - 120`；水平边界留 20px 边距。
+- `x/y` 现为**窗口在屏幕上的位置**（逻辑像素）；宠物绘制固定在窗口内 `(0,0)`，
+  窗口每帧 `setPosition(x, y)` 跟随宠物移动（见 7.4）。
+- 字段：`size=64`、`dir`（朝向 1 右 / -1 左）、`state`、`stateTime`、
+  `nextThink`、`blink`、`lookTargetX`（LOOK 注视目标，用全局 `mouse.x` 与 `centerX()` 比较）。
+- 出生贴底：`y = screen.height - size`；水平边界 `[0, screen.width - size]`。
 - 切换逻辑（见 4.2 状态图），核心参数：
   - WALK 速度 `0.06 px/ms`；走到边界反弹换向。
   - IDLE 时鼠标在 ±200px 内 → `LOOK`；否则按随机进入 WALK(60%) / SLEEP(40%)。
@@ -175,16 +179,18 @@ mochi/
   （眨眼变横线 / LOOK 时偏移 3px）+ SLEEP 时上浮渐隐的 "z"。
 
 ### 7.4 入口与交互 `src/main.js`
-- 初始化 Renderer / Pet / Loop / Config。
-- 监听 `mousemove` 收集全局鼠标坐标喂给状态机（LOOK 注视）。
-- **智能穿透 + 拖拽 + 点击反馈**：
-  - 默认 `setIgnoreCursorEvents(true)` 穿透，不挡操作。
-  - `mousedown` 命中宠物身体（包围盒 `x..x+size, y..y+size`）→ 关穿透，记录起点。
-  - `mousemove` 超过 `DRAG_THRESHOLD=4px` → 调 Rust 命令 `start_drag` 移动整个窗口
-    （宠物切 IDLE 停下）；否则视为**点击** → `pet.triggerHappy()` 播放开心一跳。
-  - `mouseup` → 恢复穿透。
-  - 命中检测用 `hitPet(x,y)`；非 Tauri 环境（纯浏览器预览）静默忽略 Tauri API。
-- `dragging` 中暂停 `pet.update`，避免拖拽时宠物乱跑。
+- 初始化 Renderer(64) / Pet / Loop / Config。
+- 主循环每帧：`pet.update` 后调用 `followWindow()`，仅在位置变化 >1px 时
+  `win.setPosition(pet.x, pet.y)`（去抖，避免每帧 IPC）；`win` 句柄预热缓存。
+- 全局 `mousemove` 收集鼠标坐标喂状态机（LOOK 注视）。
+- **拖拽 + 点击反馈**（窗口尺寸=宠物，正常接收鼠标事件，透明区外无内容故不挡桌面）：
+  - `mousedown`：记录起点、`pressing=true`。
+  - `mousemove`：`pressing` 且移动超过 `DRAG_THRESHOLD=4px` → `win.startDragging()`
+    （系统接管移动窗口），`dragging=true`，宠物切 IDLE。
+  - `mouseup`：未移动 → `pet.triggerHappy()` 播放开心一跳；
+    拖拽结束 → 读 `win.outerPosition()` 写回 `pet.x/y`，保持后续跟随一致。
+  - 非 Tauri 环境（纯浏览器预览）静默忽略 Tauri API。
+- `dragging` 中暂停 `pet.update` 与 `followWindow`，避免与系统拖拽冲突。
 - **配置恢复**：启动时 `config.ready()` 后按 `autostart` 调 `set_autostart` 命令；
   监听托盘 `config-toggle` 事件，切换 `followMouse/muted/autostart` 并持久化到 store。
 
@@ -202,16 +208,14 @@ mochi/
 ## 8. Rust 后端实现细节（当前）
 
 ### 8.1 模块划分 `src/lib.rs`
-- 注册 `tauri_plugin_store`（为后续 P4 本地存储预留）。
-- `setup` 中依次：`window::configure_main_window` 配置透明置顶窗口 + 穿透、
+- 注册 `tauri_plugin_store` 与 `tauri_plugin_autostart`。
+- `setup` 中依次：`window::configure_main_window` 配置透明置顶窗口、
   `tray::create_tray` 建托盘。
-- 暴露命令：`window::set_cursor_ignore`、`window::start_drag`。
+- 暴露命令：`window::start_drag`、`window::set_autostart`、`window::open_settings`。
 
 ### 8.2 窗口 `src/window.rs`
-- `configure_main_window`：取 id=`main` 的窗口调用 `setup_window`。
-- `setup_window`（macOS / 其他平台同逻辑）：`set_always_on_top(true)` +
-  `set_ignore_cursor_events(true)`。
-- 命令 `set_cursor_ignore(window, ignore)`：动态开关穿透。
+- `configure_main_window`：取 id=`main` 的窗口设 `always_on_top`（无边框透明，
+  正常接收鼠标，由前端 `setPosition` 跟随宠物）。
 - 命令 `start_drag(window)`：调用 `start_dragging()` 移交系统拖拽。
 
 ### 8.3 托盘 `src/tray.rs`

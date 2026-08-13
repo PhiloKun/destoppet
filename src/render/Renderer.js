@@ -1,20 +1,17 @@
-// Canvas 渲染器：处理 DPI 适配与尺寸跟随窗口
+// Canvas 渲染器：窗口尺寸=宠物大小(64x64)，处理 DPI 适配
 export class Renderer {
-  constructor(canvas) {
+  constructor(canvas, size = 64) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.dpr = window.devicePixelRatio || 1;
-    this.width = 0;
-    this.height = 0;
+    this.width = size;
+    this.height = size;
     this.resize();
-    window.addEventListener("resize", () => this.resize());
   }
 
   resize() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.width = w;
-    this.height = h;
+    const w = this.width;
+    const h = this.height;
     this.canvas.width = Math.floor(w * this.dpr);
     this.canvas.height = Math.floor(h * this.dpr);
     this.canvas.style.width = w + "px";
