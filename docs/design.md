@@ -167,7 +167,9 @@ mochi/
 
 ### 7.3 宠物状态机 `core/Pet.js`
 - `x/y` 现为**窗口在屏幕上的位置**（逻辑像素）；宠物绘制固定在窗口内 `(0,0)`，
-  窗口每帧 `setPosition(x, y)` 跟随宠物移动（见 7.4）。
+  窗口每帧 `setPosition(new LogicalPosition(x, y))` 跟随宠物移动（见 7.4）。
+  ⚠️ Tauri 2 的 `setPosition` 只接受 **Position 对象**（如 `new LogicalPosition(x,y)`），
+  直接传两个数字 `(x, y)` 会静默失败，导致窗口完全不动（拖拽/跟随均失效）。
 - 字段：`size=64`、`dir`（朝向 1 右 / -1 左）、`state`、`stateTime`、
   `nextThink`、`blink`、`lookTargetX`（LOOK 注视目标，用全局 `mouse.x` 与 `centerX()` 比较）。
 - 出生贴底：`y = screen.height - size`；水平边界 `[0, screen.width - size]`。

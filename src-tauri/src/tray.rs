@@ -1,4 +1,5 @@
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     App, Emitter, Manager,
@@ -14,10 +15,19 @@ pub fn create_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let mute = MenuItem::with_id(app, "toggle_mute", "声音：开", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &settings, &follow, &autostart, &mute, &quit])?;
 
-    let _tray = TrayIconBuilder::with_id("mochi-tray")
+    // 托盘图标（macOS 必须有图标才显示；找不到则降级为无图标托盘）
+    let tray_icon = Image::from_path(app.path().resource_dir()?.join("icons/icon.png"))
+        .or_else(|_| Image::from_path(app.path().app_data_dir()?.join("icons/icon.png")))
+        .ok();
+
+    let mut builder = TrayIconBuilder::with_id("mochi-tray")
         .tooltip("DestopPet")
         .menu(&menu)
-        .show_menu_on_left_click(false)
+        .show_menu_on_left_click(false);
+    if let Some(icon) = tray_icon {
+        builder = builder.icon(icon);
+    }
+    let _tray = builder
         .on_menu_event(|app, event| match event.id().as_ref() {
             "quit" => {
                 app.exit(0);
