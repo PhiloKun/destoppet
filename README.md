@@ -28,17 +28,32 @@ npm run tauri dev    # 启动开发模式（会编译 Rust 并打开窗口）
 npm run tauri build  # 产物在 src-tauri/target/release/bundle/
 ```
 
-- macOS：生成 `.app` / `.dmg`
+- macOS：生成 `.app` / `.dmg`（已验证）
 - Windows：需在 Windows 环境 / CI 打包生成 `.exe` / `.msi`
+- CI 自动打包：`.github/workflows/build.yml`，打 `v*` tag 或手动触发，
+  artifact 产出 macos `.dmg` 与 windows `.msi`
+
+## 功能
+
+- 宠物状态：走动 / 待机眨眼 / 打盹(Zzz) / 看向鼠标 / 点击开心一跳
+- 透明置顶窗口、默认点击穿透（不挡操作）
+- 拖拽移动宠物、点击触发反馈动画
+- 系统托盘：显示/隐藏、设置、跟随鼠标、开机自启、声音、退出
+- 独立设置窗口（托盘「设置」打开），配置本地持久化
 
 ## 项目结构
 
 ```
 src/                 前端（Canvas 动画 + 状态机）
-  core/Pet.js        宠物状态机（WALK/IDLE/SLEEP/LOOK）
+  main.js            入口：主循环 + 交互 + 托盘事件
+  settings.js        设置窗口逻辑
+  core/Pet.js        宠物状态机（WALK/IDLE/SLEEP/LOOK/HAPPY）
+  core/Config.js     设置读写（封装 tauri store）
   core/Loop.js       主循环
   render/Renderer.js Canvas 渲染器（DPI 适配）
 src-tauri/           Rust 后端（窗口/托盘）
+  src/window.rs      窗口配置 + 拖拽/穿透/开机自启/打开设置 命令
+  src/tray.rs        系统托盘 + 右键菜单
 docs/design.md       方案设计文档
 ```
 
@@ -48,7 +63,7 @@ docs/design.md       方案设计文档
 - [x] P1 占位宠物动画（程序化绘制）+ 主循环
 - [x] P2 状态机补全（WALK/IDLE/SLEEP/LOOK）+ 随机切换
 - [x] P3 点击穿透 + 拖拽 + 点击反馈（开心一跳）
-- [x] P4 托盘菜单（显示/隐藏/设置）+ 本地存储 + 开机自启
-- [ ] P5 双平台打包
+- [x] P4 托盘菜单 + 设置窗口 + 本地存储 + 开机自启
+- [x] P5 双平台打包（macOS 实测 / Windows CI）
 
 详见 `docs/design.md`。

@@ -50,3 +50,12 @@ pub fn set_autostart(app: tauri::AppHandle, enable: bool) {
         eprintln!("set_autostart({enable}) failed: {e}");
     }
 }
+
+/// 打开设置窗口（不存在则无操作）
+#[tauri::command]
+pub fn open_settings(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}

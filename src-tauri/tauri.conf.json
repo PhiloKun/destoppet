@@ -13,6 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "Mochi",
         "width": 320,
         "height": 320,
@@ -23,6 +24,19 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "contentProtected": false
+      },
+      {
+        "label": "settings",
+        "title": "Mochi 设置",
+        "width": 360,
+        "height": 300,
+        "resizable": false,
+        "fullscreen": false,
+        "transparent": false,
+        "decorations": true,
+        "visible": false,
+        "center": true,
+        "alwaysOnTop": true
       }
     ],
     "security": {

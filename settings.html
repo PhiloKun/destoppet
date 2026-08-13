@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mochi 设置</title>
+    <link rel="stylesheet" href="/src/settings.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <h1>Mochi 设置</h1>
+      <label class="row">
+        <span>跟随鼠标</span>
+        <input type="checkbox" id="followMouse" />
+      </label>
+      <label class="row">
+        <span>开机自启</span>
+        <input type="checkbox" id="autostart" />
+      </label>
+      <label class="row">
+        <span>静音</span>
+        <input type="checkbox" id="muted" />
+      </label>
+      <p class="hint" id="hint"></p>
+      <button id="close">关闭</button>
+    </main>
+    <script type="module" src="/src/settings.js"></script>
+  </body>
+</html>

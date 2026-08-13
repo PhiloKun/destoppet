@@ -17,6 +17,7 @@ pub fn run() {
             window::set_cursor_ignore,
             window::start_drag,
             window::set_autostart,
+            window::open_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

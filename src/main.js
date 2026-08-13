@@ -40,12 +40,16 @@ async function onConfigToggle(key) {
   }
 }
 
-try {
-  const { listen } = await import("@tauri-apps/api/event");
-  await listen("config-toggle", (e) => onConfigToggle(e.payload));
-} catch (e) {
-  // 非 Tauri 环境忽略
+// 注册托盘设置切换事件监听（避免顶层 await，兼容 es2021 构建目标）
+async function setupTrayEvents() {
+  try {
+    const { listen } = await import("@tauri-apps/api/event");
+    await listen("config-toggle", (e) => onConfigToggle(e.payload));
+  } catch (e) {
+    // 非 Tauri 环境忽略
+  }
 }
+setupTrayEvents();
 
 // 监听窗口尺寸变化，同步宠物活动边界
 window.addEventListener("resize", () => {

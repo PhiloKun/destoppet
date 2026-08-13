@@ -132,12 +132,11 @@ mochi/
 | P2 | 状态机补全 SLEEP / LOOK；随机切换逻辑 | 完整陪伴行为 | ✅ 已完成 |
 | P3 | 点击穿透 + 拖拽 + 点击反馈交互 | 可互动 | ✅ 已完成 |
 | P4 | 托盘菜单 + 设置面板 + 本地存储 | 可控可配置 | ✅ 已完成 |
-| P5 | Windows/macOS 打包脚本 + README；双平台自测 | 可分发安装包 | ⬜ 未开始 |
+| P5 | Windows/macOS 打包脚本 + README；双平台自测 | 可分发安装包 | ✅ 已完成（macOS 实测出包；Windows 走 CI） |
 
 > 注：原计划 P1 使用 Kenney 像素精灵图（`Sprite.js` + `assets/pet/*.png`），
 > 实际实现改为**程序化 Canvas 绘制**（圆角方块 + 眼睛 + Zzz），免去素材依赖、
-> 更快跑通核心玩法。`Sprite.js` / `Config.js` 暂未创建，待替换真实素材或接入
-> 设置存储时再补。详见第 10 章。
+> 更快跑通核心玩法。`Sprite.js` 暂未创建，待替换真实素材时再补。详见第 10 章。
 
 ---
 
@@ -219,12 +218,24 @@ mochi/
 - 右键菜单：`显示/隐藏`（toggle）、`退出`（quit）。
 - `show_menu_on_left_click(false)`：左键点击不弹菜单。
 - 左键单击托盘（`TrayIconEvent::Click` Left+Up）== 显示/隐藏切换。
-- 当前无独立"设置"项（P4 设置面板待补）。
+- 菜单含：`显示/隐藏`、`设置`、`跟随鼠标`、`开机自启`、`声音`、`退出`。
+- `跟随/开机自启/声音` 三项通过 `app.emit("config-toggle", key)` 通知前端翻转并持久化；
+  `设置` 项调 `window::open_settings` 打开独立设置窗口。
 
 ### 8.4 窗口配置 `tauri.conf.json`
-- `windows[0]`：`width/height=320`，`resizable=false`，`transparent=true`，
-  `decorations=false`，`alwaysOnTop=true`，`skipTaskbar=true`。
+- `windows[0]`（label=`main`）：`width/height=320`，`resizable=false`，
+  `transparent=true`，`decorations=false`，`alwaysOnTop=true`，`skipTaskbar=true`。
+- `windows[1]`（label=`settings`）：普通窗口（`transparent=false`），
+  `visible=false` 默认隐藏，`center=true`，托盘"设置"打开。
 - `app.macOSPrivateApi=true`（透明窗口必需）；`security.csp=null`（开发期宽松）。
+
+### 8.5 设置窗口（独立 UI）
+- 入口：`settings.html` + `src/settings.js` + `src/settings.css`（Vite 多页，
+  `rollupOptions.input` 含 `main`/`settings`）。
+- 三个开关：**跟随鼠标 / 开机自启 / 静音**，读写 `Config`（store）。
+- `开机自启` 变更额外 `invoke("set_autostart", {enable})`。
+- `open_settings` 命令（`window.rs`）`show` + `set_focus` 该窗口；关闭按钮 `hide`。
+- 与托盘开关共享同一份 `Config` 存储，状态一致。
 
 ---
 
@@ -260,8 +271,37 @@ mochi/
 - [x] **P4 托盘"设置"项**：`tray.rs` 菜单已加 跟随/开机自启/声音 切换项。✅
 - [x] **开机自启**：通过 `tauri-plugin-autostart` 实现（macOS LaunchAgent /
       Windows 注册表，由插件托管）。✅
+- [x] **独立设置窗口 UI**：`settings.html` + `src/settings.js` + `open_settings`
+      命令，托盘"设置"打开，与托盘开关共享 Config。✅
+- [x] **P5 双平台打包**：macOS 本地 `tauri build` 已出 `.app`/`.dmg`；
+      Windows 经 GitHub Actions CI（`build.yml`）出 `.msi`。✅
 - [ ] 是否做更强互动反馈：拖拽抛出、喂食道具。
 - [ ] 是否接入 AI 对话 / 桌面挂件（时钟、待办）。
 - [ ] Live2D 形象替换时间点（替换 `Pet.draw` 为精灵/Live2D 渲染）。
-- [ ] Windows 平台专项实测：透明窗口 + 穿透 + 托盘在 Windows 下的表现。
-- [ ] 独立可视化设置窗口（当前仅托盘开关，无面板 UI）。
+- [ ] Windows 平台真机实测：透明窗口 + 穿透 + 托盘在 Windows 下的表现
+      （当前仅能保证配置正确，未在本机 Windows 运行验证）。
+
+---
+
+## 12. 打包与双平台说明
+
+### 12.1 本地构建
+```bash
+npm install
+npm run tauri build      # 产物在 src-tauri/target/release/bundle/
+```
+- macOS：`.app` + `.dmg`（已验证，aarch64）。
+- Windows：需在 Windows 环境 / CI 打包，产出 `.msi` / `.exe`。
+
+### 12.2 CI 自动打包
+`.github/workflows/build.yml`：
+- `build-macos`：macOS runner 出 `dmg` 产物。
+- `build-windows`：Windows runner 出 `msi` 产物。
+- 触发：`push` 打 `v*` tag，或手动 `workflow_dispatch`。
+  产物以 artifact 形式上传，可下载分发。
+
+### 12.3 跨平台注意
+- 透明无边框窗口：macOS 需 `macOSPrivateApi=true`；Windows 由 wry 原生支持。
+- 点击穿透：`set_ignore_cursor_events` 两平台均支持。
+- 开机自启：`tauri-plugin-autostart` 自动处理 macOS LaunchAgent / Windows 注册表。
+- 托盘：`tray-icon` 特性两平台均启用；Windows 托盘右键菜单行为一致。
