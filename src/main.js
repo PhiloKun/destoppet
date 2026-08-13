@@ -49,12 +49,15 @@ async function setupTrayEvents() {
 setupTrayEvents();
 
 // ===== 交互：拖拽 / 点击反馈 =====
-// 窗口尺寸=宠物，正常接收鼠标。mousedown 命中即开始拖拽（startDragging 由系统接管）；
+// 窗口尺寸=宠物，正常接收鼠标。macOS 上透明无装饰窗的 startDragging 经常失效，
+// 因此采用"手动拖拽"：mousedown 记录窗口起点与鼠标起点，mousemove 时用鼠标位移
+// 直接 setPosition 移动窗口（delta 方式，逻辑坐标，跨平台可靠）。
 // 若鼠标几乎没移动则视为"点击"，播放开心反馈。
 let pressing = false;
 let dragging = false;
 let moved = false;
-let downPos = { x: 0, y: 0 };
+let downMouse = { x: 0, y: 0 }; // mousedown 时鼠标相对窗口逻辑坐标
+let dragStartWin = { x: 0, y: 0 }; // mousedown 时窗口逻辑位置
 const DRAG_THRESHOLD = 4; // px
 
 async function getWin() {
@@ -62,44 +65,50 @@ async function getWin() {
   return getCurrentWindow();
 }
 
-canvas.addEventListener("mousedown", (e) => {
+canvas.addEventListener("mousedown", async (e) => {
   pressing = true;
   dragging = false;
   moved = false;
-  downPos = { x: e.clientX, y: e.clientY };
+  downMouse = { x: e.clientX, y: e.clientY };
+  // 记录当前窗口逻辑位置作为拖拽起点
+  try {
+    const win = await ensureWin();
+    if (win) {
+      const pos = await win.outerPosition(); // PhysicalPosition
+      const scale = window.devicePixelRatio || 1;
+      dragStartWin = { x: pos.x / scale, y: pos.y / scale };
+    } else {
+      dragStartWin = { x: pet.x, y: pet.y };
+    }
+  } catch (err) {
+    dragStartWin = { x: pet.x, y: pet.y };
+  }
 });
 
 window.addEventListener("mousemove", (e) => {
-  if (pressing) {
-    const dx = e.clientX - downPos.x;
-    const dy = e.clientY - downPos.y;
-    if (!dragging && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
-      dragging = true;
-      moved = true;
-      pet.setState(State.IDLE);
-      // 系统接管拖拽（窗口由鼠标移动）。用已缓存的 win 同步调用，
-      // 避免在 mousedown 异步链外触发导致失效。
-      if (winCache) winCache.startDragging();
+  if (!pressing) return;
+  const dx = e.clientX - downMouse.x;
+  const dy = e.clientY - downMouse.y;
+  if (!dragging && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+    dragging = true;
+    moved = true;
+    pet.setState(State.IDLE);
+  }
+  if (dragging) {
+    // 手动跟随：新窗口位置 = 拖拽起点 + 鼠标位移（逻辑坐标）
+    pet.x = dragStartWin.x + dx;
+    pet.y = dragStartWin.y + dy;
+    // 主循环会在下一帧 setPosition；这里同步设置确保跟手
+    if (winCache) {
+      winCache.setPosition(pet.x, pet.y).catch(() => {});
     }
   }
 });
 
-window.addEventListener("mouseup", async () => {
+window.addEventListener("mouseup", () => {
   if (!pressing) return;
-  if (pressing && !moved) {
+  if (!moved) {
     pet.triggerHappy(); // 点击反馈
-  }
-  // 拖拽结束后，把系统移动后的实际窗口位置写回 pet，保持后续跟随一致
-  if (dragging) {
-    try {
-      const win = await ensureWin();
-      const pos = await win.outerPosition(); // Physical
-      const scale = window.devicePixelRatio || 1;
-      pet.x = pos.x / scale;
-      pet.y = pos.y / scale;
-    } catch (err) {
-      // 忽略
-    }
   }
   pressing = false;
   dragging = false;
@@ -144,8 +153,9 @@ async function followWindow() {
 const loop = new Loop((dt, now) => {
   if (!dragging) {
     pet.update(dt, mouse, config.get("followMouse"));
-    followWindow();
   }
+  // 无论是否拖拽，都保持窗口位置与 pet.x/pet.y 一致
+  followWindow();
   renderer.clear();
   pet.draw(renderer.ctx);
 });

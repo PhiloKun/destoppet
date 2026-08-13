@@ -11,7 +11,7 @@
 走路、随机待机、打盹、眨眼、看向鼠标等陪伴型行为，通过系统托盘控制。
 
 **本期目标（MVP）**：跑通"可爱跟随/挂机"核心玩法 —— 宠物在桌面走动、随机动作、
-空闲打盹、看向鼠标；透明置顶窗口、点击穿透、托盘菜单、轻量本地存储。
+空闲打盹、看向鼠标；透明置顶窗口（窗口=宠物，手动拖拽跟随）、托盘菜单、轻量本地存储。
 
 ---
 
@@ -61,12 +61,12 @@ mochi/
 │           └── sleep.png
 ├── src-tauri/                    # Rust 后端
 │   ├── Cargo.toml
-│   ├── tauri.conf.json           # 窗口透明/置顶/穿透配置
+│   ├── tauri.conf.json           # 窗口透明/置顶（64×64，手动跟随）配置
 │   ├── build.rs
 │   └── src/
 │       ├── main.rs
 │       ├── tray.rs               # 系统托盘 + 右键菜单
-│       └── window.rs             # 透明、置顶、点击穿透、开机自启
+│       └── window.rs             # 透明、置顶、手动拖拽、开机自启
 ├── package.json                  # 前端脚本 + tauri cli
 ├── README.md
 └── .gitignore
@@ -80,9 +80,9 @@ mochi/
 - `transparent: true` + `decorations: false`：透明无边框
 - `alwaysOnTop: true`：置顶（宠物不挡操作但可见）
 - `contentProtected: false`、`skipTaskbar: true`：不在任务栏显示
-- **点击穿透**：默认 `ignoreCursorEvents` 开启，让宠物不拦截鼠标；
-  拖拽/交互时临时关闭（见 4.4）
-- 窗口尺寸 = 屏幕工作区，宠物坐标在内部 Canvas 上计算
+- **窗口尺寸 = 宠物大小（64×64）**：窗口本身就是宠物，正常接收鼠标事件；
+  透明区域外无内容，故不挡桌面操作，**无需点击穿透**（`ignoreCursorEvents` 已弃用）。
+  宠物坐标即窗口在屏幕上的位置，每帧 `setPosition` 跟随移动（详见 4.4 / 7.4）。
 
 ### 4.2 宠物状态机（Pet.js）
 ```
@@ -107,10 +107,12 @@ mochi/
 - 眨眼 / 打盹为独立短动画叠加
 
 ### 4.4 交互
-- 默认点击穿透（不挡操作）
-- 按住宠物拖拽：临时关闭穿透 → 移动窗口内坐标 → 松开恢复
-- 点击：播放一个"惊讶/开心"反馈动画
-- 鼠标靠近：进入 `LOOK` 状态，朝鼠标方向
+- 窗口尺寸 = 宠物（64×64），正常接收鼠标，透明区外无内容故不挡桌面操作。
+- **拖拽（手动跟随）**：按住宠物，`mousemove` 时用鼠标位移 delta 直接
+  `setPosition(起点窗口位置 + delta)` 移动窗口（逻辑坐标）。macOS 上透明无边框窗的
+  `startDragging()` 经常失效，故采用手动跟随方案，跨平台可靠。
+- **点击**：鼠标几乎未移动（<4px）则播放"开心一跳"反馈动画（HAPPY 状态）。
+- 鼠标靠近：进入 `LOOK` 状态，朝鼠标方向。
 
 ### 4.5 系统托盘（tray.rs）
 - 托盘图标常驻
@@ -145,10 +147,10 @@ mochi/
 - macOS 上 Tauri 透明窗口在部分桌面环境下边缘可能有 1px 描边，需实测。
 - 开机自启在 macOS 需处理权限弹窗；Windows 通过注册表/启动文件夹实现。
 - 素材为占位 CC0 资源，后续替换 Live2D 需引入 `live2d` 相关渲染（不在本期）。
-- 交互模型：窗口尺寸=宠物（透明无边框），正常接收鼠标；每帧 `setPosition` 跟随宠物
-  移动，透明区外无内容故不挡桌面操作，无需 ignoreCursorEvents 穿透。
-- `startDragging()` 需在窗口句柄已缓存的同步上下文调用，避免 await 破坏拖拽时序
-  （窗口句柄在启动时预热缓存）。
+- 交互模型：窗口尺寸=宠物（透明无边框，64×64），正常接收鼠标；每帧 `setPosition`
+  跟随宠物移动，透明区外无内容故不挡桌面操作，无需 ignoreCursorEvents 穿透。
+- 拖拽采用手动 `setPosition` 跟随（窗口起点位置 + 鼠标位移 delta），跨平台稳定；
+  不使用 `startDragging()`（macOS 透明无边框窗下经常失效）。
 
 ---
 
@@ -184,13 +186,13 @@ mochi/
   `win.setPosition(pet.x, pet.y)`（去抖，避免每帧 IPC）；`win` 句柄预热缓存。
 - 全局 `mousemove` 收集鼠标坐标喂状态机（LOOK 注视）。
 - **拖拽 + 点击反馈**（窗口尺寸=宠物，正常接收鼠标事件，透明区外无内容故不挡桌面）：
-  - `mousedown`：记录起点、`pressing=true`。
-  - `mousemove`：`pressing` 且移动超过 `DRAG_THRESHOLD=4px` → `win.startDragging()`
-    （系统接管移动窗口），`dragging=true`，宠物切 IDLE。
-  - `mouseup`：未移动 → `pet.triggerHappy()` 播放开心一跳；
-    拖拽结束 → 读 `win.outerPosition()` 写回 `pet.x/y`，保持后续跟随一致。
+  - `mousedown`：记录鼠标相对窗口坐标 + 当前窗口逻辑位置（`outerPosition`），`pressing=true`。
+  - `mousemove`：`pressing` 且移动超过 `DRAG_THRESHOLD=4px` 判定拖拽，`dragging=true`、
+    宠物切 IDLE；拖拽中每帧 `pet.x/y = 拖拽起点窗口位置 + 鼠标位移 delta` 并
+    `setPosition` 跟随（手动方案，macOS 透明窗稳定）。
+  - `mouseup`：未移动（点击）→ `pet.triggerHappy()` 播放开心一跳；拖拽结束复位标记。
   - 非 Tauri 环境（纯浏览器预览）静默忽略 Tauri API。
-- `dragging` 中暂停 `pet.update` 与 `followWindow`，避免与系统拖拽冲突。
+- `dragging` 中暂停 `pet.update`（不走动），窗口位置由手动 `setPosition` 实时跟随。
 - **配置恢复**：启动时 `config.ready()` 后按 `autostart` 调 `set_autostart` 命令；
   监听托盘 `config-toggle` 事件，切换 `followMouse/muted/autostart` 并持久化到 store。
 
@@ -211,12 +213,14 @@ mochi/
 - 注册 `tauri_plugin_store` 与 `tauri_plugin_autostart`。
 - `setup` 中依次：`window::configure_main_window` 配置透明置顶窗口、
   `tray::create_tray` 建托盘。
-- 暴露命令：`window::start_drag`、`window::set_autostart`、`window::open_settings`。
+- 暴露命令：`window::start_drag`（兜底，前端现用 JS `setPosition` 手动拖拽）、
+  `window::set_autostart`、`window::open_settings`。
 
 ### 8.2 窗口 `src/window.rs`
 - `configure_main_window`：取 id=`main` 的窗口设 `always_on_top`（无边框透明，
-  正常接收鼠标，由前端 `setPosition` 跟随宠物）。
-- 命令 `start_drag(window)`：调用 `start_dragging()` 移交系统拖拽。
+  正常接收鼠标，由前端 `setPosition` 跟随宠物移动）。
+- 命令 `start_drag(window)`：调用 `start_dragging()` 移交系统拖拽（兜底；前端当前
+  用 `setPosition` 手动跟随，规避 macOS 透明窗 `startDragging()` 失效）。
 
 ### 8.3 托盘 `src/tray.rs`
 - 右键菜单：`显示/隐藏`（toggle）、`退出`（quit）。
@@ -227,8 +231,9 @@ mochi/
   `设置` 项调 `window::open_settings` 打开独立设置窗口。
 
 ### 8.4 窗口配置 `tauri.conf.json`
-- `windows[0]`（label=`main`）：`width/height=320`，`resizable=false`，
-  `transparent=true`，`decorations=false`，`alwaysOnTop=true`，`skipTaskbar=true`。
+- `windows[0]`（label=`main`）：`width/height=64`（窗口=宠物，正常接收鼠标，
+  由前端每帧 `setPosition` 跟随），`resizable=false`，`transparent=true`，
+  `decorations=false`，`alwaysOnTop=true`，`skipTaskbar=true`。
 - `windows[1]`（label=`settings`）：普通窗口（`transparent=false`），
   `visible=false` 默认隐藏，`center=true`，托盘"设置"打开。
 - `app.macOSPrivateApi=true`（透明窗口必需）；`security.csp=null`（开发期宽松）。
@@ -247,12 +252,14 @@ mochi/
 
 | 前端调用 | Rust 命令 | 方向 | 用途 |
 |----------|-----------|------|------|
-| `getCurrentWindow().setIgnoreCursorEvents(b)` | （Tauri 内置） | JS→窗口 | 开关点击穿透 |
-| `invoke("start_drag")` | `start_drag` | JS→Rust | 发起系统级窗口拖拽 |
-| `invoke("set_cursor_ignore", {ignore})` | `set_cursor_ignore` | JS→Rust | 兜底开关穿透（预留） |
+| `getCurrentWindow().setPosition(x,y)` | （Tauri 内置） | JS→窗口 | 拖拽/跟随时移动窗口（手动） |
+| `getCurrentWindow().outerPosition()` | （Tauri 内置） | JS→窗口 | 读当前窗口位置作为拖拽起点 |
+| `invoke("start_drag")` | `start_drag` | JS→Rust | 兜底：系统级窗口拖拽（前端现用 setPosition） |
+| `invoke("set_autostart", {enable})` | `set_autostart` | JS→Rust | 开关开机自启 |
+| `invoke("open_settings")` | `open_settings` | JS→Rust | 打开独立设置窗口 |
 
-> 当前穿透开关实际走 Tauri 内置 `setIgnoreCursorEvents`；`set_cursor_ignore` 命令
-> 作为统一封装预留，便于后续在非 macOS 平台或批量控制时复用。
+> 交互模型为"窗口=宠物（64×64）+ 手动 setPosition 跟随"，已弃用点击穿透
+> （`ignoreCursorEvents`）与 `startDragging()` 系统托拽（macOS 透明窗失效）。
 
 ---
 
@@ -306,6 +313,7 @@ npm run tauri build      # 产物在 src-tauri/target/release/bundle/
 
 ### 12.3 跨平台注意
 - 透明无边框窗口：macOS 需 `macOSPrivateApi=true`；Windows 由 wry 原生支持。
-- 点击穿透：`set_ignore_cursor_events` 两平台均支持。
+- 拖拽：采用 `setPosition` 手动跟随方案；`startDragging()` 在 macOS 透明无边框窗下
+  失效，已弃用。点击穿透（`ignoreCursorEvents`）因窗口=宠物尺寸而无需使用。
 - 开机自启：`tauri-plugin-autostart` 自动处理 macOS LaunchAgent / Windows 注册表。
 - 托盘：`tray-icon` 特性两平台均启用；Windows 托盘右键菜单行为一致。

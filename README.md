@@ -52,7 +52,7 @@ src/                 前端（Canvas 动画 + 状态机）
   core/Loop.js       主循环
   render/Renderer.js Canvas 渲染器（DPI 适配）
 src-tauri/           Rust 后端（窗口/托盘）
-  src/window.rs      窗口配置 + 拖拽/穿透/开机自启/打开设置 命令
+  src/window.rs      窗口配置 + 手动拖拽/开机自启/打开设置 命令
   src/tray.rs        系统托盘 + 右键菜单
 docs/design.md       方案设计文档
 ```
@@ -62,7 +62,7 @@ docs/design.md       方案设计文档
 - [x] P0 项目骨架 + 透明置顶窗口配置
 - [x] P1 占位宠物动画（程序化绘制）+ 主循环
 - [x] P2 状态机补全（WALK/IDLE/SLEEP/LOOK）+ 随机切换
-- [x] P3 点击穿透 + 拖拽 + 点击反馈（开心一跳）
+- [x] P3 手动拖拽（setPosition 跟随）+ 点击反馈（开心一跳）
 - [x] P4 托盘菜单 + 设置窗口 + 本地存储 + 开机自启
 - [x] P5 双平台打包（macOS 实测 / Windows CI）
 
