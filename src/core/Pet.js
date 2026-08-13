@@ -6,6 +6,7 @@ export const State = {
   IDLE: "IDLE",
   SLEEP: "SLEEP",
   LOOK: "LOOK",
+  HAPPY: "HAPPY", // 点击反馈：开心一跳
 };
 
 export class Pet {
@@ -28,8 +29,8 @@ export class Pet {
     this.stateTime = 0;
   }
 
-  // mouse: { x, y } | null
-  update(dt, mouse) {
+  // mouse: { x, y } | null ; followMouse: 是否允许看向鼠标
+  update(dt, mouse, followMouse = true) {
     this.stateTime += dt;
     this.blink -= dt;
     if (this.blink < 0 && Math.random() < 0.01) this.blink = 120; // 偶尔眨眼
@@ -53,7 +54,7 @@ export class Pet {
         break;
       }
       case State.IDLE: {
-        if (mouse && Math.abs(mouse.x - (this.x + this.size / 2)) < 200) {
+        if (followMouse && mouse && Math.abs(mouse.x - (this.x + this.size / 2)) < 200) {
           this.lookTargetX = mouse.x;
           this.setState(State.LOOK);
           break;
@@ -66,6 +67,14 @@ export class Pet {
         }
         break;
       }
+      case State.HAPPY: {
+        // 开心一跳，约 600ms 后回 IDLE
+        if (this.stateTime > 600) {
+          this.setState(State.IDLE);
+          this.nextThink = 600 + Math.random() * 1000;
+        }
+        break;
+      }
       case State.SLEEP: {
         if (this.stateTime > 4000 + Math.random() * 3000) {
           this.setState(State.IDLE);
@@ -74,7 +83,7 @@ export class Pet {
         break;
       }
       case State.LOOK: {
-        if (!mouse || Math.abs(mouse.x - (this.x + this.size / 2)) > 260) {
+        if (!followMouse || !mouse || Math.abs(mouse.x - (this.x + this.size / 2)) > 260) {
           this.setState(State.IDLE);
         }
         break;
@@ -82,10 +91,23 @@ export class Pet {
     }
   }
 
+  // 点击反馈：触发开心一跳（若正在拖拽/睡觉也允许被打断）
+  triggerHappy() {
+    this.setState(State.HAPPY);
+    this.stateTime = 0;
+  }
+
   draw(ctx) {
     const s = this.size;
     const x = this.x;
-    const y = this.y;
+    let y = this.y;
+    // 开心一跳：用 sin 做 0->上->下的弹跳
+    let jump = 0;
+    if (this.state === State.HAPPY) {
+      const t = this.stateTime / 600; // 0..1
+      jump = Math.sin(t * Math.PI) * 18;
+      y -= jump;
+    }
     ctx.save();
 
     // 身体（圆角方块）
@@ -93,13 +115,14 @@ export class Pet {
     this.roundRect(ctx, x, y, s, s, 14);
     ctx.fill();
 
-    // 脚（走动时小幅摆动）
+    // 脚（走动时小幅摆动；开心时收起）
     ctx.fillStyle = "#5aa9c9";
     const foot = this.state === State.WALK ? Math.sin(this.stateTime / 80) * 4 : 0;
-    ctx.fillRect(x + 10, y + s - 6, 14, 8 + foot);
-    ctx.fillRect(x + s - 24, y + s - 6, 14, 8 - foot);
+    const footH = this.state === State.HAPPY ? 4 : 8;
+    ctx.fillRect(x + 10, y + s - 6, 14, footH + foot);
+    ctx.fillRect(x + s - 24, y + s - 6, 14, footH - foot);
 
-    // 眼睛（眨眼 / 看向鼠标）
+    // 眼睛（眨眼 / 看向鼠标 / 开心弯月）
     const eyeY = y + 24;
     const blink = this.blink > 0;
     let lookOff = 0;
@@ -110,10 +133,27 @@ export class Pet {
     if (blink) {
       ctx.fillRect(x + 16, eyeY, 10, 2);
       ctx.fillRect(x + s - 26, eyeY, 10, 2);
+    } else if (this.state === State.HAPPY) {
+      // 弯月笑眼（向上弧）
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#222";
+      for (const cx of [x + 21, x + s - 21]) {
+        ctx.beginPath();
+        ctx.arc(cx + lookOff, eyeY + 4, 5, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
+      }
     } else {
       ctx.beginPath();
       ctx.arc(x + 21 + lookOff, eyeY, 5, 0, Math.PI * 2);
       ctx.arc(x + s - 21 + lookOff, eyeY, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 开心张嘴
+    if (this.state === State.HAPPY) {
+      ctx.fillStyle = "#e06b6b";
+      ctx.beginPath();
+      ctx.arc(x + s / 2, y + 44, 6, 0, Math.PI);
       ctx.fill();
     }
 

@@ -1,16 +1,19 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    App, Manager,
+    App, Emitter, Manager,
 };
 
 /// 创建系统托盘 + 右键菜单
 pub fn create_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let show = MenuItem::with_id(app, "toggle", "显示/隐藏", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let follow = MenuItem::with_id(app, "toggle_follow", "跟随鼠标：开", true, None::<&str>)?;
+    let autostart = MenuItem::with_id(app, "toggle_autostart", "开机自启：关", true, None::<&str>)?;
+    let mute = MenuItem::with_id(app, "toggle_mute", "声音：开", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &follow, &autostart, &mute, &quit])?;
 
-    let _tray = TrayIconBuilder::with_id("destoppet-tray")
+    let _tray = TrayIconBuilder::with_id("mochi-tray")
         .tooltip("DestopPet")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -27,6 +30,10 @@ pub fn create_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                         let _ = w.show();
                     }
                 }
+            }
+            // 设置类：发事件给前端，由前端更新 store 与系统能力
+            "toggle_follow" | "toggle_autostart" | "toggle_mute" => {
+                let _ = app.emit("config-toggle", event.id().as_ref().to_string());
             }
             _ => {}
         })

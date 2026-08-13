@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DestopPet",
+  "productName": "Mochi",
   "version": "0.1.0",
-  "identifier": "com.philokun.destoppet",
+  "identifier": "com.philokun.mochi",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -10,9 +10,10 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "DestopPet",
+        "title": "Mochi",
         "width": 320,
         "height": 320,
         "resizable": false,

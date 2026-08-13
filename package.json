@@ -1,7 +1,7 @@
 {
-  "name": "destoppet",
+  "name": "mochi",
   "version": "0.1.0",
-  "description": "跨平台桌面桌宠 (Tauri + Canvas)",
+  "description": "跨平台桌面桌宠 Mochi (Tauri + Canvas)",
   "type": "module",
   "scripts": {
     "dev": "vite",
