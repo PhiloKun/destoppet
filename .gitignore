@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+dist/
+
+# Rust
+src-tauri/target/
+**/*.rs.bk
+
+# Tauri generated
+src-tauri/gen/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.log
